@@ -29,7 +29,7 @@ namespace GofileDownloader.Helpers
 
         private static void GenerateUrlFile()
         {
-            File.Create(Constants.Paths.URLS_PATH);
+            using FileStream fs = File.Create(Constants.Paths.URLS_PATH);
         }
     }
 }

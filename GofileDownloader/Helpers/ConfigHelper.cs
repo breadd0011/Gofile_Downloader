@@ -1,5 +1,6 @@
 ﻿using GofileDownloader.Models;
 using GofileDownloader.Utils;
+using Spectre.Console;
 using System.Runtime.Serialization;
 using System.Text.Json;
 
@@ -51,6 +52,8 @@ namespace GofileDownloader.Helpers
         public static void GenerateConfigFile()
         {
             Config config = new() { Token = ConsoleHelper.PromptUserForToken() };
+            AnsiConsole.Clear();
+
             string json = JsonSerializer.Serialize(config, jsonSerOptions);
             File.WriteAllText(Constants.Paths.CONFIG_PATH, json);
         }

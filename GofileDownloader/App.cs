@@ -55,9 +55,10 @@ namespace GoFileDownloader
         {
             try
             {
-                // Get URL from user and api response
-                GofileDataModel gofileData = JsonSerializer.Deserialize<GofileDataModel>(
-                    await GetResponse(ConsoleHelper.PromptUserForUrl()));
+                // Get URL from user and check if working
+                string url = ConsoleHelper.PromptUserForUrl();
+                string response = await GetResponse(url);
+                GofileDataModel gofileData = JsonSerializer.Deserialize<GofileDataModel>(response);
 
                 // Add files to list
                 List<GofileDataModel.Child> fileList = [];
@@ -65,59 +66,84 @@ namespace GoFileDownloader
                 {
                     fileList.Add(item);
                 }
-                
-                await DownloadFiles(fileList);
 
+                await DownloadFiles(fileList);
             }
             catch (InvalidInputException ex)
             {
                 ConsoleHelper.WriteError(ex.Message);
+                return;
+            }
+            catch (InvalidTokenException ex)
+            {
+                ConsoleHelper.WriteError(ex.Message);
+                return;
             }
         }
         private static async Task DownloadMultipleUrlOption()
         {
-            // Load Urls from file if theres any
-            List<string>? urls = UrlHelper.LoadUrlsFromFile();
-            if (urls == null)
+            try
             {
-                ConsoleHelper.WriteError("There are no links in your urls.txt file");
-                return;
-            }
-
-            // Validate loaded Urls
-            List<string> validUrls = [];
-            foreach (var url in urls)
-            {
-                bool isValid = Regex.Match(url, Constants.Regex.GOFILE_REGEX).Success;
-                if (isValid)
+                // Load Urls from file if theres any
+                List<string>? urls = UrlHelper.LoadUrlsFromFile();
+                if (urls == null)
                 {
-                    validUrls.Add(url);
-                }
-            }
-
-            // Ask user if wants to continue if any of the links were bad
-            if (urls.Count != validUrls.Count && !AnsiConsole.Confirm($"[red]Only {validUrls.Count} out of {urls.Count} are valid URL's from your urls.txt. Do you wish to continue?[/]"))
-            {
-                return;
-            }
-
-
-            List<GofileDataModel.Child> fileList = [];
-            foreach (var url in validUrls)
-            {
-                // Get API responses from urls
-                GofileDataModel gofileData = JsonSerializer.Deserialize<GofileDataModel>(
-                    await GetResponse(url));
-
-                // Add file download URLs from response
-                foreach (var item in gofileData.Data.Children.Values)
-                {
-                    fileList.Add(item);
+                    ConsoleHelper.WriteError("There are no links in your urls.txt file");
+                    return;
                 }
 
-            }
+                // Validate loaded Urls
+                List<string> validUrls = [];
+                foreach (var url in urls)
+                {
+                    bool isValid = Regex.Match(url, Constants.Regex.GOFILE_REGEX).Success;
+                    if (isValid)
+                    {
+                        validUrls.Add(url);
+                    }
+                }
 
-            await DownloadFiles(fileList);
+                if (validUrls.Count <= 0)
+                {
+                    ConsoleHelper.WriteError("There are no valid urls in your urls.txt");
+                    return;
+                }
+
+                // Ask user if wants to continue if any of the links were bad
+                if (urls.Count != validUrls.Count && !AnsiConsole.Confirm($"[red]Only {validUrls.Count} out of {urls.Count} are valid URL's from your urls.txt. Do you wish to continue?[/]"))
+                {
+                    return;
+                }
+
+
+                List<GofileDataModel.Child> fileList = [];
+                foreach (var url in validUrls)
+                {
+                    // Get API responses from urls
+                    GofileDataModel gofileData = JsonSerializer.Deserialize<GofileDataModel>(
+                        await GetResponse(url));
+
+                    // Add file download URLs from response
+                    foreach (var item in gofileData.Data.Children.Values)
+                    {
+                        fileList.Add(item);
+                    }
+
+                }
+
+                await DownloadFiles(fileList);
+            }
+            catch (InvalidInputException ex)
+            {
+                ConsoleHelper.WriteError(ex.Message);
+                return;
+            }
+            catch (InvalidTokenException ex)
+            {
+                ConsoleHelper.WriteError(ex.Message);
+                return;
+            }
+            
         }
         private static void ChangeToken()
         {
@@ -137,17 +163,19 @@ namespace GoFileDownloader
                .HideCompleted(false)
                .Columns(new ProgressColumn[]
                {
-                   new TaskDescriptionColumn { Alignment = Justify.Right},
+                   new TaskDescriptionColumn { Alignment = Justify.Left},
                    new ProgressBarColumn(),
                    new PercentageColumn(),
                    new RemainingTimeColumn(),
-                   new SpinnerColumn(),
                })
                .StartAsync(async ctx =>
                {
+                   var maxLength = fileList.Max(file => file.Name.Length);
+
                    var tasks = fileList.Select(file =>
                    {
-                       var progressTask = ctx.AddTask($"[yellow]{file.Name}[/]", autoStart: false);
+                       var paddedName = file.Name.PadRight(maxLength);
+                       var progressTask = ctx.AddTask($"[yellow]{paddedName}[/]", autoStart: false);
 
                        return Task.Run(async () =>
                        {
@@ -178,10 +206,9 @@ namespace GoFileDownloader
             {
                 return await APIHelper.GetDataAsync(url, _config.Token);
             }
-             catch (InvalidTokenException ex)
+             catch (InvalidTokenException)
             {
-                ConsoleHelper.WriteError(ex.Message);
-                return string.Empty;
+                throw;
             }
         }
     }
